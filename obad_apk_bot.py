@@ -13,9 +13,29 @@ import time
 import base64
 import zipfile
 import shutil
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, ContextTypes, filters
+
+
+class _HealthCheckHandler(BaseHTTPRequestHandler):
+    """معالج بسيط يرد بـ 200 فقط ليقتنع Render أن الخدمة حية."""
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Obad APK Factory Bot is alive.")
+
+    def log_message(self, format, *args):
+        pass  # لتجنب إغراق السجل برسائل كل فحص صحي
+
+
+def _start_health_check_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), _HealthCheckHandler)
+    server.serve_forever()
 
 # ========================= الإعدادات =========================
 # القيم الحساسة تُقرأ من متغيرات البيئة (Environment Variables) فقط
@@ -209,6 +229,9 @@ async def handle_zip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
+    # نشغّل سيرفر الفحص الصحي في خيط منفصل بالتوازي مع البوت
+    threading.Thread(target=_start_health_check_server, daemon=True).start()
+
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(MessageHandler(filters.Document.ALL, handle_zip))
     print("Obad APK Factory Bot is running...")
