@@ -120,13 +120,15 @@ def upload_project_folder(extracted_dir):
 
 
 def trigger_workflow():
-    """يشغّل GitHub Actions يدويًا (workflow_dispatch)."""
+    """يشغّل GitHub Actions يدويًا (workflow_dispatch). يرجع (نجح؟, رسالة التفاصيل)."""
     url = (
         f"{GITHUB_API}/repos/{GITHUB_OWNER}/{GITHUB_REPO}"
         f"/actions/workflows/{WORKFLOW_FILE}/dispatches"
     )
     resp = requests.post(url, headers=HEADERS, json={"ref": GITHUB_BRANCH})
-    return resp.status_code == 204
+    if resp.status_code == 204:
+        return True, "تم التشغيل بنجاح"
+    return False, f"HTTP {resp.status_code}: {resp.text}"
 
 
 def get_latest_run_id():
@@ -199,7 +201,14 @@ async def handle_zip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("🚀 تم الرفع، بدأ البناء الآن... (قد يستغرق 2-5 دقائق)")
 
-    trigger_workflow()
+    ok, detail = trigger_workflow()
+    if not ok:
+        await update.message.reply_text(
+            f"⚠️ تعذر بدء عملية البناء.\nسبب الفشل الحقيقي من GitHub:\n{detail}"
+        )
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return
+
     time.sleep(10)  # انتظار قصير قبل قراءة رقم التشغيل
     run_id = get_latest_run_id()
 
